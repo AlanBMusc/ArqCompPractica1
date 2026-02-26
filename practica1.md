@@ -7,48 +7,104 @@
 **Procesador:** Intel Xeon Ice Lake 8352Y
 
 ---
-
 ## Introducción
 
-En este experimento se analiza cómo influye el acceso a memoria en el rendimiento de un programa sencillo en C.  
-El programa realiza sumas sobre un vector, pero accediendo a los elementos con un salto fijo definido por el parámetro $D$.
+En este experimento se analiza cómo influye el acceso a memoria en el rendimiento de un programa sencillo en C.
+
+El programa realiza sumas sobre un vector, accediendo a los elementos con un salto fijo definido por el parámetro $D$.
 
 El objetivo es observar cómo cambia el número de ciclos por acceso cuando:
 
-- Cambia el tamaño del vector
-- Cambia el salto
-- Cambia el tipo de acceso
+- Cambia el tamaño del vector  
+- Cambia el salto (stride)  
+- Cambia el tipo de acceso (Directo vs Indirecto)  
 
-Las medidas se obtuvieron utilizando el contador de ciclos del procesador (`rdtsc`) y compilando sin optimizaciones.
+Las medidas se obtuvieron utilizando el contador de ciclos del procesador (`rdtsc`) y compilando sin optimizaciones (`-O0`).
+
+---
+
+## Metodología y Parámetros
+
+### 1. Deducción de los cálculos
+
+Para obtener el coste medio por acceso, el programa realiza una reducción (suma) de $R$ elementos.  
+La medición se realiza sobre 10 repeticiones de este bucle para estabilizar los resultados.
+
+El cálculo de ciclos por acceso se define como:
+
+$$
+\text{Ciclos por acceso} =
+\frac{\text{Ciclos totales de las 10 repeticiones}}{10 \times R}
+$$
+
+---
+
+### 2. Selección de los saltos ($D$)
+
+Los valores de $D$ (2, 8, 128, 512, 1024) se eligieron para analizar el comportamiento respecto a la línea de caché (64 bytes):
+
+- **D = 2**  
+  Alta localidad espacial. En `double` (8 bytes), accedemos a un dato cada 16 bytes.  
+  Aprovechamos 4 datos por cada línea cargada.
+
+- **D = 8**  
+  Punto crítico para `double`. Como $8 \times 8 = 64$ bytes, cada acceso cae en una línea distinta.  
+  Aquí desaparece la localidad espacial.
+
+- **D > 8**  
+  Saltos grandes que permiten comprobar si el Hardware Prefetcher puede seguir el patrón.
+
+---
+
+### 3. Origen de las líneas ($L$)
+
+Los valores de $L$ se seleccionaron para observar la transición entre niveles de memoria:
+
+- **384** → Mitad de la L1 (768 líneas)  
+- **1152** → Supera la L1 pero cabe en L2  
+- **10240 / 15360** → Zona intermedia de la L2  
+- **163840** → Supera ampliamente la L2 y fuerza accesos a RAM  
+
+---
+
+### 4. Relación entre L y R
+
+El número de elementos a sumar ($R$) se calcula dinámicamente:
+
+Si $D < \text{elementos por línea}$:
+- Varios accesos caen en la misma línea.
+- Para llenar $L$ líneas necesitamos más accesos.
+
+Si $D \geq 8$ (para double):
+- Cada acceso cae en una línea distinta.
+- Por tanto:
+
+$$
+R = L
+$$
+
+No existe reutilización de líneas de caché.
 
 ---
 
 ## Características de la caché
 
-Los parámetros de caché se obtuvieron directamente del sistema:
+Los parámetros se obtuvieron del sistema:
 
-Configuración:
-
-- Tamaño de línea: 64 bytes
-- Caché L1: 48 KB
-- Caché L2: 1.25 MB
-
-Número de líneas:
-
-- L1: 768 líneas
-- L2: 20480 líneas
-
+/sys/devices/system/cpu/cpu0/cache/
 ---
 
 ## Resultados con double
 
 Se utilizó un vector de `double` (8 bytes) accedido mediante un vector de índices.
 
-| D \\ L | 384 | 1152 | 10240 | 163840 |
-|-------|-----|------|-------|--------|
-| 2 | 7.14 | 7.17 | 7.13 | 7.17 |
-| 128 | 7.19 | 7.75 | 7.58 | 16.04 |
-| 1024 | 9.94 | 8.14 | 17.97 | 17.92 |
+| D \\ L | 384 | 1152 | 10240 | 15360 | 40960 | 81920 | 163840 |
+|-------|-----|------|-------|-------|-------|-------|--------|
+| 2     | 7.09 | 7.10 | 7.11 | 7.12 | 7.12 | 7.17 | 7.16 |
+| 8     | 7.14 | 7.16 | 7.17 | 7.26 | 7.29 | 7.20 | 7.20 |
+| 128   | 7.19 | 7.75 | 7.58 | 7.59 | 7.70 | 8.84 | 16.04 |
+| 512   | 7.78 | 8.04 | 12.18 | 13.91 | 17.55 | 17.81 | 18.02 |
+| 1024  | 9.94 | 8.14 | 17.97 | 18.11 | 18.06 | 18.15 | 18.21 |
 
 ### Interpretación
 
@@ -65,12 +121,13 @@ Esto explica el aumento progresivo en los ciclos por acceso.
 
 Aquí usamos el archivo `int.csv`. Como el `int` ocupa 4 bytes, en una línea de 64 bytes caben 16 elementos. Esto se nota en que los ciclos son ligeramente más bajos que en el `double` cuando el salto ($D$) es pequeño.
 
-| D \ L | 384 (L1) | 1152 (L1-L2) | 10240 (L2) | 163840 (RAM) |
-|------|----------|--------------|------------|--------------|
-| 2    | 6.88     | 6.87         | 6.91       | 6.91         |
-| 8    | 6.92     | 6.94         | 6.95       | 6.95         |
-| 128  | 7.37     | 7.63         | 7.64       | 14.52        |
-| 1024 | 9.02     | 8.04         | 16.94      | 17.51        |
+| D \\ L | 384 | 1152 | 10240 | 15360 | 40960 | 81920 | 163840 |
+|-------|-----|------|-------|-------|-------|-------|--------|
+| 2     | 7.58 | 6.87 | 6.91 | 6.90 | 6.94 | 6.91 | 6.91 |
+| 8     | 7.03 | 6.94 | 6.95 | 6.96 | 6.98 | 6.97 | 6.96 |
+| 128   | 7.37 | 7.63 | 7.64 | 7.64 | 7.67 | 8.12 | 14.52 |
+| 512   | 7.67 | 7.82 | 11.23 | 12.85 | 16.88 | 17.15 | 17.44 |
+| 1024  | 9.02 | 8.04 | 16.94 | 17.06 | 17.22 | 17.45 | 17.51 |
 
 **Nota:** En $D=2$ y $D=8$, el tiempo es casi idéntico. Esto es porque con un `int`, un salto de 8 posiciones sigue siendo solo media línea de caché (32 bytes), así que la localidad espacial sigue siendo excelente.
 
@@ -92,12 +149,13 @@ Sin embargo, cuando el salto es grande, el beneficio desaparece porque cada acce
 
 Estos datos salen de `directo.csv`. Aquí no usamos el vector `ind[]`, sino que el programa calcula la dirección directamente. Al quitar la carga de memoria del índice, rascamos unos decimales en casi todas las medidas.
 
-| D \ L | 384 (L1) | 1152 (L1-L2) | 10240 (L2) | 163840 (RAM) |
-|------|----------|--------------|------------|--------------|
-| 2    | 7.05     | 7.07         | 7.10       | 7.15         |
-| 8    | 7.00     | 7.14         | 7.13       | 7.22         |
-| 128  | 7.25     | 7.69         | 7.55       | 16.03        |
-| 1024 | 9.77     | 7.97         | 17.18      | 17.21        |
+| D \\ L | 384 | 1152 | 10240 | 15360 | 40960 | 81920 | 163840 |
+|-------|-----|------|-------|-------|-------|-------|--------|
+| 2     | 7.05 | 7.07 | 7.10 | 7.11 | 7.25 | 7.15 | 7.16 |
+| 8     | 7.01 | 7.14 | 7.13 | 7.20 | 7.24 | 7.15 | 7.15 |
+| 128   | 7.25 | 7.69 | 7.55 | 7.56 | 7.62 | 8.79 | 16.03 |
+| 512   | 7.71 | 7.91 | 11.85 | 13.52 | 16.90 | 17.12 | 17.38 |
+| 1024  | 9.77 | 7.97 | 17.18 | 17.20 | 17.20 | 17.22 | 17.21 ||
 
 
 ## Acceso directo frente a indirecto
