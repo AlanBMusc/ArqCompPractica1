@@ -61,6 +61,20 @@ En este caso, cada lectura implica traer datos nuevos desde niveles más lentos 
 Esto explica el aumento progresivo en los ciclos por acceso.
 
 ---
+# Resultados con Integers (4 bytes)
+
+Aquí usamos el archivo `int.csv`. Como el `int` ocupa 4 bytes, en una línea de 64 bytes caben 16 elementos. Esto se nota en que los ciclos son ligeramente más bajos que en el `double` cuando el salto ($D$) es pequeño.
+
+| D \ L | 384 (L1) | 1152 (L1-L2) | 10240 (L2) | 163840 (RAM) |
+|------|----------|--------------|------------|--------------|
+| 2    | 6.88     | 6.87         | 6.91       | 6.91         |
+| 8    | 6.92     | 6.94         | 6.95       | 6.95         |
+| 128  | 7.37     | 7.63         | 7.64       | 14.52        |
+| 1024 | 9.02     | 8.04         | 16.94      | 17.51        |
+
+**Nota:** En $D=2$ y $D=8$, el tiempo es casi idéntico. Esto es porque con un `int`, un salto de 8 posiciones sigue siendo solo media línea de caché (32 bytes), así que la localidad espacial sigue siendo excelente.
+
+---
 
 ## Comparación con enteros
 
@@ -73,6 +87,18 @@ Esto permite reutilizar datos durante más tiempo cuando el salto es pequeño.
 Sin embargo, cuando el salto es grande, el beneficio desaparece porque cada acceso requiere igualmente una nueva línea de caché.
 
 ---
+
+# Resultados con Acceso Directo (Double)
+
+Estos datos salen de `directo.csv`. Aquí no usamos el vector `ind[]`, sino que el programa calcula la dirección directamente. Al quitar la carga de memoria del índice, rascamos unos decimales en casi todas las medidas.
+
+| D \ L | 384 (L1) | 1152 (L1-L2) | 10240 (L2) | 163840 (RAM) |
+|------|----------|--------------|------------|--------------|
+| 2    | 7.05     | 7.07         | 7.10       | 7.15         |
+| 8    | 7.00     | 7.14         | 7.13       | 7.22         |
+| 128  | 7.25     | 7.69         | 7.55       | 16.03        |
+| 1024 | 9.77     | 7.97         | 17.18      | 17.21        |
+
 
 ## Acceso directo frente a indirecto
 
