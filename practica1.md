@@ -1,13 +1,11 @@
-# ArqCompPractica1
-
-# Estudio del comportamiento de caché en Finisterrae III
+# Estudio del comportamiento de caché en Finisterrae III.
 
 **Autores:** [Alan Barreiro y Damián Del Río]  
-**Sistema:** CESGA Finisterrae III  
-**Procesador:** Intel Xeon Ice Lake 8352Y
+**Sistema:** CESGA Finisterrae III.
+**Procesador:** Intel Xeon Ice Lake 8352Y.
 
 ---
-## Introducción
+## Introducción.
 
 En este experimento se analiza cómo influye el acceso a memoria en el rendimiento de un programa sencillo en C.
 
@@ -15,17 +13,17 @@ El programa realiza sumas sobre un vector, accediendo a los elementos con un sal
 
 El objetivo es observar cómo cambia el número de ciclos por acceso cuando:
 
-- Cambia el tamaño del vector  
-- Cambia el salto (stride)  
-- Cambia el tipo de acceso (Directo vs Indirecto)  
+- Cambia el tamaño del vector.
+- Cambia el salto.
+- Cambia el tipo de acceso (Directo vs Indirecto)  .
 
 Las medidas se obtuvieron utilizando el contador de ciclos del procesador (`rdtsc`) y compilando sin optimizaciones (`-O0`).
 
 ---
 
-## Metodología y Parámetros
+## Metodología y Parámetros.
 
-### 1. Deducción de los cálculos
+### 1. Deducción de los cálculos.
 
 Para obtener el coste medio por acceso, el programa realiza una reducción (suma) de $R$ elementos.  
 La medición se realiza sobre 10 repeticiones de este bucle para estabilizar los resultados.
@@ -39,7 +37,7 @@ $$
 
 ---
 
-### 2. Selección de los saltos ($D$)
+### 2. Selección de los saltos ($D$).
 
 Los valores de $D$ (2, 8, 128, 512, 1024) se eligieron para analizar el comportamiento respecto a la línea de caché (64 bytes):
 
@@ -56,18 +54,27 @@ Los valores de $D$ (2, 8, 128, 512, 1024) se eligieron para analizar el comporta
 
 ---
 
-### 3. Origen de las líneas ($L$)
+### 3. Origen de las líneas ($L$) y cálculo de umbrales
+Para que el experimento sea representativo, los valores de $L$ se seleccionaron basándose en el número de líneas que caben en cada nivel de caché ($S1$ para L1 y $S2$ para L2), tal como solicita el enunciado. 
 
-Los valores de $L$ se seleccionaron para observar la transición entre niveles de memoria:
+Sabiendo que el tamaño de línea es de **64 bytes**, realizamos el siguiente cálculo:
+- **L1 (48 KB):** $S1 = \frac{48 \times 1024}{64} = 768 \text{ líneas}$
+- **L2 (1.25 MB):** $S2 = \frac{1.25 \times 1024 \times 1024}{64} = 20480 \text{ líneas}$
 
-- **384** → Mitad de la L1 (768 líneas)  
-- **1152** → Supera la L1 pero cabe en L2  
-- **10240 / 15360** → Zona intermedia de la L2  
-- **163840** → Supera ampliamente la L2 y fuerza accesos a RAM  
+Siguiendo las instrucciones de la práctica, los valores de $L$ utilizados son:
+| Referencia | Cálculo | Valor de $L$ | Objetivo del experimento |
+| :--- | :--- | :--- | :--- |
+| **0.5 * S1** | $0.5 \times 768$ | **384** | Rendimiento óptimo (L1) |
+| **1.5 * S1** | $1.5 \times 768$ | **1152** | Salida de L1 hacia L2 |
+| **0.5 * S2** | $0.5 \times 20480$ | **10240** | Estabilidad en L2 |
+| **0.75 * S2** | $0.75 \times 20480$ | **15360** | Límite superior de L2 |
+| **2 * S2** | $2 \times 20480$ | **40960** | Inicio de desborde a RAM |
+| **4 * S2** | $4 \times 20480$ | **81920** | Acceso a RAM |
+| **8 * S2** | $8 \times 20480$ | **163840** | Comportamiento en RAM (Prefetching) |
 
 ---
 
-### 4. Relación entre L y R
+### 4. Relación entre L y R.
 
 El número de elementos a sumar ($R$) se calcula dinámicamente:
 
@@ -87,14 +94,14 @@ No existe reutilización de líneas de caché.
 
 ---
 
-## Características de la caché
+## Características de la caché.
 
 Los parámetros se obtuvieron del sistema:
 
 /sys/devices/system/cpu/cpu0/cache/
 ---
 
-## Resultados con double
+## Resultados con double.
 
 Se utilizó un vector de `double` (8 bytes) accedido mediante un vector de índices.
 
@@ -106,7 +113,7 @@ Se utilizó un vector de `double` (8 bytes) accedido mediante un vector de índi
 | 512   | 7.78 | 8.04 | 12.18 | 13.91 | 17.55 | 17.81 | 18.02 |
 | 1024  | 9.94 | 8.14 | 17.97 | 18.11 | 18.06 | 18.15 | 18.21 |
 
-### Interpretación
+### Interpretación.
 
 Para valores pequeños de $D$, los accesos permanecen dentro de la misma línea de caché durante varias iteraciones.  
 Esto permite aprovechar los datos cargados previamente.
@@ -117,7 +124,7 @@ En este caso, cada lectura implica traer datos nuevos desde niveles más lentos 
 Esto explica el aumento progresivo en los ciclos por acceso.
 
 ---
-# Resultados con Integers (4 bytes)
+# Resultados con Integers (4 bytes).
 
 Aquí usamos el archivo `int.csv`. Como el `int` ocupa 4 bytes, en una línea de 64 bytes caben 16 elementos. Esto se nota en que los ciclos son ligeramente más bajos que en el `double` cuando el salto ($D$) es pequeño.
 
@@ -133,7 +140,7 @@ Aquí usamos el archivo `int.csv`. Como el `int` ocupa 4 bytes, en una línea de
 
 ---
 
-## Comparación con enteros
+## Comparación con enteros.
 
 Se repitió el experimento utilizando `int` en lugar de `double`.
 
@@ -145,7 +152,7 @@ Sin embargo, cuando el salto es grande, el beneficio desaparece porque cada acce
 
 ---
 
-# Resultados con Acceso Directo (Double)
+# Resultados con Acceso Directo (Double).
 
 Estos datos salen de `directo.csv`. Aquí no usamos el vector `ind[]`, sino que el programa calcula la dirección directamente. Al quitar la carga de memoria del índice, rascamos unos decimales en casi todas las medidas.
 
@@ -158,7 +165,7 @@ Estos datos salen de `directo.csv`. Aquí no usamos el vector `ind[]`, sino que 
 | 1024  | 9.77 | 7.97 | 17.18 | 17.20 | 17.20 | 17.22 | 17.21 ||
 
 
-## Acceso directo frente a indirecto
+## Acceso directo frente a indirecto.
 
 Se compararon dos formas de acceder a los datos:
 
@@ -180,7 +187,7 @@ Esto se traduce en un pequeño aumento del tiempo por acceso.
 
 ---
 
-## Prefetching
+## Prefetching.
 
 El procesador intenta anticipar accesos a memoria cuando detecta patrones regulares.
 
@@ -192,7 +199,7 @@ En ese caso pueden aparecer accesos a memoria principal.
 
 ---
 
-## Conclusiones
+## Conclusiones.
 
 El experimento muestra que el rendimiento depende en gran medida del patrón de acceso a memoria.
 
