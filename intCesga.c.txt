@@ -1,0 +1,93 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include "counter.h"
+
+#define CLS 64   // Tamaño línea caché (bytes)
+
+/* Inicialización completa */
+void init_array(int *A, int size) {
+    for (int i = 0; i < size; i++) {
+        int val = rand();
+        int sign = (rand() % 2) ? 1 : -1;
+        A[i] = sign * val;
+    }
+}
+
+int main(int argc, char **argv) {
+
+    if (argc < 3) {
+        printf("Uso: %s D L\n", argv[0]);
+        return 1;
+    }
+
+    int D = atoi(argv[1]);
+    int L = atoi(argv[2]);
+
+    /* Cálculo de R según tu criterio */
+    int R;
+
+    if (D < 16)
+        R = (L * 16) / D;   // 16 ints por línea
+    else
+        R = L;
+
+    srand(1);
+
+    int N = R * D;
+
+    /* Asegurar múltiplo de CLS para aligned_alloc */
+    size_t bytes = N * sizeof(int);
+    size_t padded = ((bytes + CLS - 1) / CLS) * CLS;
+
+    int *A = aligned_alloc(CLS, padded);
+    int *ind = malloc(R * sizeof(int));
+
+    if (!A || !ind) {
+        printf("Error reservando memoria\n");
+        return 1;
+    }
+
+    init_array(A, N);
+
+    for (int i = 0; i < R; i++) {
+        ind[i] = i * D;
+    }
+
+    int S[10];
+    int suma;
+    double ck;
+
+    start_counter();
+
+    for (int k = 0; k < 10; k++) {
+        suma = 0;
+
+        for (int i = 0; i < R; i++) {
+            suma += A[ind[i]];
+        }
+
+        S[k] = suma;
+    }
+
+    ck = get_counter();
+
+    double media = 0.0;
+    for (int i = 0; i < 10; i++) {
+        media += S[i];
+    }
+    media /= 10.0;
+
+    printf("%d,%d,%d,%.5f,%.5f,%.5f\n",
+           D,
+           R,
+           L,
+           media,
+           ck / 10.0,
+           ck / (10.0 * R));
+
+    free(A);
+    free(ind);
+
+    return 0;
+}
